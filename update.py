@@ -4,6 +4,7 @@ import datetime
 import json
 import os
 import shutil
+from urllib import error as urllib_error
 from urllib import request
 
 FFMPEG_RELEASES = "https://endoflife.date/api/ffmpeg.json"
@@ -53,7 +54,7 @@ def get_eol_versions():
 # The list should match versions in SKIP_VARIANTS that are not fully skipped
 try:
     keep_version = get_eol_versions()
-except Exception as e:
+except (urllib_error.URLError, urllib_error.HTTPError, OSError) as e:
     print(f"Warning: Could not fetch versions from API: {e}")
     print("Using static fallback version list (may be outdated).")
     print("Please check network connectivity to fetch latest versions from endoflife.date API")
