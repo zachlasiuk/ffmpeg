@@ -23,6 +23,14 @@ done
 OS_NAME=$(uname -s)
 is_ubuntu=false
 is_alpine=false
+# Detect architecture
+ARCH=$(uname -m)
+GNU_ARCH=""
+if [[ "$ARCH" == "x86_64" ]]; then
+    GNU_ARCH="x86_64-linux-gnu"
+elif [[ "$ARCH" == "aarch64" ]] || [[ "$ARCH" == "arm64" ]]; then
+    GNU_ARCH="aarch64-linux-gnu"
+fi
 if [[ "$OS_NAME" == "Linux" ]]; then
     if grep -q "Ubuntu" /etc/os-release; then
         is_ubuntu=true
@@ -39,13 +47,26 @@ install_ffmpeg() {
         echo "ERROR: ffmpeg not found in ${PREFIX}/bin"
         exit 1
     fi
-    # Check if ffmpeg library is linked to x86_64-linux-gnu and copy it to /usr/local/lib
-    if ldd ${PREFIX}/bin/ffmpeg | grep x86_64-linux-gnu | cut -d ' ' -f 3 | grep -q . ; then
-        ldd ${PREFIX}/bin/ffmpeg | grep x86_64-linux-gnu | cut -d ' ' -f 3 | xargs -i cp -p {} /usr/local/lib/
+    # Check if ffmpeg library is linked to architecture-specific paths and copy it to /usr/local/lib
+    # Support both x86_64-linux-gnu and aarch64-linux-gnu
+    if [[ -n "$GNU_ARCH" ]] && ldd ${PREFIX}/bin/ffmpeg | grep "$GNU_ARCH" | cut -d ' ' -f 3 | grep -q . ; then
+        ldd ${PREFIX}/bin/ffmpeg | grep "$GNU_ARCH" | cut -d ' ' -f 3 | xargs -i cp -p {} /usr/local/lib/
     fi
     # some nvidia libs are in the cuda targets directory
+    # Support both x86_64 and ARM (sbsa) targets
     if [[ -d /usr/local/cuda/targets/x86_64-linux/lib/ ]]; then
-        cp -p /usr/local/cuda/targets/x86_64-linux/lib/libnpp* /usr/local/lib
+        if ls /usr/local/cuda/targets/x86_64-linux/lib/libnpp* 1> /dev/null 2>&1; then
+            cp -p /usr/local/cuda/targets/x86_64-linux/lib/libnpp* /usr/local/lib
+        else
+            echo "Info: No NVIDIA NPP libraries found in x86_64-linux/lib (this is normal if not using NVIDIA variant)"
+        fi
+    fi
+    if [[ -d /usr/local/cuda/targets/sbsa-linux/lib/ ]]; then
+        if ls /usr/local/cuda/targets/sbsa-linux/lib/libnpp* 1> /dev/null 2>&1; then
+            cp -p /usr/local/cuda/targets/sbsa-linux/lib/libnpp* /usr/local/lib
+        else
+            echo "Info: No NVIDIA NPP libraries found in sbsa-linux/lib (this is normal if not using NVIDIA variant)"
+        fi
     fi
 
     # Check if ffmpeg library is linked to opt/ffmpeg and copy it to /usr/local/lib
@@ -77,8 +98,9 @@ install_ffmpeg() {
     done
 
     # Create pkgconfig directory and copy and modify pkgconfig files
+    # Support both x86_64-linux-gnu and aarch64-linux-gnu
     mkdir -p /usr/local/lib/pkgconfig
-    for pc in ${PREFIX}/lib/pkgconfig/libav*.pc ${PREFIX}/lib/pkgconfig/libpostproc.pc ${PREFIX}/lib/pkgconfig/kvazaar.pc ${PREFIX}/lib/pkgconfig/libsw*.pc ${PREFIX}/lib/x86_64-linux-gnu/pkgconfig/libvmaf*; do
+    for pc in ${PREFIX}/lib/pkgconfig/libav*.pc ${PREFIX}/lib/pkgconfig/libpostproc.pc ${PREFIX}/lib/pkgconfig/kvazaar.pc ${PREFIX}/lib/pkgconfig/libsw*.pc ${PREFIX}/lib/x86_64-linux-gnu/pkgconfig/libvmaf* ${PREFIX}/lib/aarch64-linux-gnu/pkgconfig/libvmaf*; do
         if [[ -f "$pc" ]]; then
             # sed "s:${PREFIX}:/usr/local:g" <"$pc" >/usr/local/lib/pkgconfig/"${pc##*/}"
             sed "s:${PREFIX}:/usr/local:g; s:/lib64:/lib:g" <"$pc" >/usr/local/lib/pkgconfig/"${pc##*/}"; \

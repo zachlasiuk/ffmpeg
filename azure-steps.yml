@@ -1,44 +1,77 @@
 steps:
+  # Setup Docker Buildx for multi-arch builds
   - bash: |
       set -eu
-      docker build -t ${DOCKER}:${VERSION}-${VARIANT} -t ${DOCKER}:${LONG_VERSION}-${VARIANT} -t ${GHCR}/${VERSION}-${VARIANT} -t ${GHCR}/${LONG_VERSION}-${VARIANT} --build-arg MAKEFLAGS="-j$(($(grep -c ^processor /proc/cpuinfo) + 1))" docker-images/${VERSION}/${VARIANT}
+      # Install QEMU for multi-arch emulation
+      docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+      
+      # Create and use a new buildx builder instance
+      docker buildx create --name multiarch --driver docker-container --use
+      docker buildx inspect --bootstrap
+    displayName: Setup Docker Buildx for multi-arch
+
+  - bash: |
+      set -eu
+      # Build for local platform only for testing
+      docker buildx build \
+        --platform linux/amd64 \
+        --build-arg MAKEFLAGS="-j$(($(grep -c ^processor /proc/cpuinfo) + 1))" \
+        -t ${DOCKER}:${VERSION}-${VARIANT} \
+        -t ${DOCKER}:${LONG_VERSION}-${VARIANT} \
+        -t ${GHCR}/${VERSION}-${VARIANT} \
+        -t ${GHCR}/${LONG_VERSION}-${VARIANT} \
+        --load \
+        docker-images/${VERSION}/${VARIANT}
+      
+      # Test the built image
       docker run --rm ${DOCKER}:${LONG_VERSION}-${VARIANT} -buildconf
       docker images
-    displayName: Build docker image
+    displayName: Build and test docker image (amd64)
 
   - bash: |
       set -eu
       echo ${DOCKER_PASSWORD} | docker login --username ${DOCKER_LOGIN} --password-stdin
-      docker push ${DOCKER}:${VERSION}-${VARIANT}
-      docker push ${DOCKER}:${LONG_VERSION}-${VARIANT}
+      echo ${GHCR_PAT} | docker login ghcr.io --username ${GHCR_USERNAME} --password-stdin
+      
+      # Build and push multi-arch images
+      docker buildx build \
+        --platform linux/amd64,linux/arm64 \
+        --build-arg MAKEFLAGS="-j$(($(grep -c ^processor /proc/cpuinfo) + 1))" \
+        -t ${DOCKER}:${VERSION}-${VARIANT} \
+        -t ${DOCKER}:${LONG_VERSION}-${VARIANT} \
+        -t ${GHCR}/${VERSION}-${VARIANT} \
+        -t ${GHCR}/${LONG_VERSION}-${VARIANT} \
+        --push \
+        docker-images/${VERSION}/${VARIANT}
 
-      echo ${GHCR_PAT} | docker login ghcr.io --username USERNAME --password-stdin
-      docker push ${GHCR}/${VERSION}-${VARIANT}
-      docker push ${GHCR}/${LONG_VERSION}-${VARIANT}
-
+      # Handle parent tags
       if [ "${ISPARENT}" == "True" ] && [ "${VARIANT}" != "${PARENT}" ]
         then
-        docker tag "${DOCKER}:${LONG_VERSION}-${VARIANT}" "${DOCKER}:${VERSION}-${PARENT}"
-        docker tag "${DOCKER}:${LONG_VERSION}-${VARIANT}" "${DOCKER}:${MAJOR_VERSION}-${PARENT}"
-        docker push "${DOCKER}:${VERSION}-${PARENT}"
-        docker push "${DOCKER}:${MAJOR_VERSION}-${PARENT}"
-
-        docker tag "${DOCKER}:${LONG_VERSION}-${VARIANT}" "${GHCR}:${VERSION}-${PARENT}"
-        docker tag "${DOCKER}:${LONG_VERSION}-${VARIANT}" "${GHCR}:${MAJOR_VERSION}-${PARENT}"
-        docker push "${GHCR}:${VERSION}-${PARENT}"
-        docker push "${GHCR}:${MAJOR_VERSION}-${PARENT}"
+        docker buildx build \
+          --platform linux/amd64,linux/arm64 \
+          --build-arg MAKEFLAGS="-j$(($(grep -c ^processor /proc/cpuinfo) + 1))" \
+          -t ${DOCKER}:${VERSION}-${PARENT} \
+          -t ${DOCKER}:${MAJOR_VERSION}-${PARENT} \
+          -t ${GHCR}:${VERSION}-${PARENT} \
+          -t ${GHCR}:${MAJOR_VERSION}-${PARENT} \
+          --push \
+          docker-images/${VERSION}/${VARIANT}
       fi
 
+      # Handle latest tags
       if [ "${ISLATEST:-False}" == "True" ]
         then
-        docker tag "${DOCKER}:${LONG_VERSION}-${VARIANT}" "${DOCKER}:latest"
-        docker push "${DOCKER}:latest"
-
-        docker tag "${DOCKER}:${LONG_VERSION}-${VARIANT}" "${GHCR}:latest"
-        docker push "${GHCR}:latest"
+        docker buildx build \
+          --platform linux/amd64,linux/arm64 \
+          --build-arg MAKEFLAGS="-j$(($(grep -c ^processor /proc/cpuinfo) + 1))" \
+          -t ${DOCKER}:latest \
+          -t ${GHCR}:latest \
+          --push \
+          docker-images/${VERSION}/${VARIANT}
       fi
     condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
-    displayName: Push docker image
+    displayName: Push multi-arch docker image
     env:
       DOCKER_PASSWORD: $(docker.password)
       GHCR_PAT: $(ghcr.pat)
+      GHCR_USERNAME: $(ghcr.username)

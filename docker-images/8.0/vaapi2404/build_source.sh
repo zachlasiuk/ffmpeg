@@ -11,6 +11,15 @@ manifestJsonVersionsFile="/tmp/workdir/generated_build_versions_manifest.json"
 OS_NAME=$(uname -s)
 is_ubuntu=false
 is_alpine=false
+# Detect architecture
+ARCH=$(uname -m)
+is_x86=false
+is_arm=false
+if [[ "$ARCH" == "x86_64" ]]; then
+    is_x86=true
+elif [[ "$ARCH" == "aarch64" ]] || [[ "$ARCH" == "arm64" ]]; then
+    is_arm=true
+fi
 if [[ "$OS_NAME" == "Linux" ]]; then
     if grep -q "Ubuntu" /etc/os-release; then
         is_ubuntu=true
@@ -74,7 +83,12 @@ build_libvpx() {
     git -C libvpx pull 2> /dev/null || git clone --branch ${version} --depth 1 https://chromium.googlesource.com/webm/libvpx.git
     cd libvpx
     pwd
-    ./configure  --prefix="${PREFIX}" --disable-examples --disable-unit-tests --enable-vp9-highbitdepth --enable-pic --enable-shared --as=yasm
+    # YASM is only for x86 architectures; libvpx auto-detects ARM and uses appropriate optimizations
+    if [[ "$is_x86" == "true" ]]; then
+        ./configure  --prefix="${PREFIX}" --disable-examples --disable-unit-tests --enable-vp9-highbitdepth --enable-pic --enable-shared --as=yasm
+    else
+        ./configure  --prefix="${PREFIX}" --disable-examples --disable-unit-tests --enable-vp9-highbitdepth --enable-pic --enable-shared
+    fi
     make
     make install
 }
@@ -86,7 +100,12 @@ build_libwebp() {
 }
 
 build_libmp3lame() {
-    ./configure --prefix="${PREFIX}" --bindir="${PREFIX}/bin" --enable-shared --enable-nasm --disable-frontend && \
+    # NASM is only for x86 architectures
+    if [[ "$is_x86" == "true" ]]; then
+        ./configure --prefix="${PREFIX}" --bindir="${PREFIX}/bin" --enable-shared --enable-nasm --disable-frontend
+    else
+        ./configure --prefix="${PREFIX}" --bindir="${PREFIX}/bin" --enable-shared --disable-frontend
+    fi
     make && \
     make install
 }
@@ -170,8 +189,13 @@ build_aom() {
     git clone --branch ${version} --depth 1 https://aomedia.googlesource.com/aom ${dir} && \
     cd ${dir} && \
     mkdir -p ./aom_build && \
-    cd ./aom_build && \
-    cmake -G "Unix Makefiles" -DCMAKE_INSTALL_PREFIX="${PREFIX}" -DBUILD_SHARED_LIBS=1 -DENABLE_NASM=on .. && \
+    cd ./aom_build
+    # NASM is only for x86 architectures
+    if [[ "$is_x86" == "true" ]]; then
+        cmake -G "Unix Makefiles" -DCMAKE_INSTALL_PREFIX="${PREFIX}" -DBUILD_SHARED_LIBS=1 -DENABLE_NASM=on ..
+    else
+        cmake -G "Unix Makefiles" -DCMAKE_INSTALL_PREFIX="${PREFIX}" -DBUILD_SHARED_LIBS=1 ..
+    fi
     make && \
     make install
 }
@@ -371,9 +395,9 @@ build_ffmpeg() {
         --enable-vaapi \
         --enable-version3 \
         --enable-whisper \
-        --extra-cflags="-I${PREFIX}/include -I/usr/include/x86_64-linux-gnu" \
-        --extra-ldflags="-L${PREFIX}/lib -L/usr/lib/x86_64-linux-gnu -L/usr/lib" \
-        --extra-ldflags=-L/opt/ffmpeg/lib/x86_64-linux-gnu \
+        --extra-cflags="-I${PREFIX}/include -I/usr/include/x86_64-linux-gnu -I/usr/include/aarch64-linux-gnu" \
+        --extra-ldflags="-L${PREFIX}/lib -L/usr/lib/x86_64-linux-gnu -L/usr/lib/aarch64-linux-gnu -L/usr/lib" \
+        --extra-ldflags=-L/opt/ffmpeg/lib/x86_64-linux-gnu -L/opt/ffmpeg/lib/aarch64-linux-gnu \
         --extra-libs=-ldl \
         --extra-libs=-lm \
         --extra-libs=-lpthread \
