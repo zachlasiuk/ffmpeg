@@ -53,7 +53,8 @@ try:
     keep_version = get_eol_versions()
 except Exception as e:
     print(f"Warning: Could not fetch versions from API: {e}")
-    print("Using static version list...")
+    print("Using static fallback version list (may be outdated).")
+    print("Please check network connectivity to fetch latest versions from endoflife.date API")
     # Use the version already present in the repository
     keep_version = ["8.0.1"]
 

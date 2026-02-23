@@ -55,10 +55,18 @@ install_ffmpeg() {
     # some nvidia libs are in the cuda targets directory
     # Support both x86_64 and ARM (sbsa) targets
     if [[ -d /usr/local/cuda/targets/x86_64-linux/lib/ ]]; then
-        cp -p /usr/local/cuda/targets/x86_64-linux/lib/libnpp* /usr/local/lib 2>/dev/null || true
+        if ls /usr/local/cuda/targets/x86_64-linux/lib/libnpp* 1> /dev/null 2>&1; then
+            cp -p /usr/local/cuda/targets/x86_64-linux/lib/libnpp* /usr/local/lib
+        else
+            echo "Info: No NVIDIA NPP libraries found in x86_64-linux/lib (this is normal if not using NVIDIA variant)"
+        fi
     fi
     if [[ -d /usr/local/cuda/targets/sbsa-linux/lib/ ]]; then
-        cp -p /usr/local/cuda/targets/sbsa-linux/lib/libnpp* /usr/local/lib 2>/dev/null || true
+        if ls /usr/local/cuda/targets/sbsa-linux/lib/libnpp* 1> /dev/null 2>&1; then
+            cp -p /usr/local/cuda/targets/sbsa-linux/lib/libnpp* /usr/local/lib
+        else
+            echo "Info: No NVIDIA NPP libraries found in sbsa-linux/lib (this is normal if not using NVIDIA variant)"
+        fi
     fi
 
     # Check if ffmpeg library is linked to opt/ffmpeg and copy it to /usr/local/lib
