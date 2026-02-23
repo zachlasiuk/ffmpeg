@@ -49,13 +49,17 @@ def get_eol_versions():
 
 
 # For offline usage, use static version list
+# NOTE: Update the fallback version list below when new FFmpeg releases are published
+# The list should match versions in SKIP_VARIANTS that are not fully skipped
 try:
     keep_version = get_eol_versions()
 except Exception as e:
     print(f"Warning: Could not fetch versions from API: {e}")
     print("Using static fallback version list (may be outdated).")
     print("Please check network connectivity to fetch latest versions from endoflife.date API")
+    print("To update fallback list: edit update.py and add new versions to the list below")
     # Use the version already present in the repository
+    # MAINTAINER NOTE: Update this list when new FFmpeg versions are released
     keep_version = ["8.0.1"]
 
 print("The following versions of ffmpeg is still supported:")

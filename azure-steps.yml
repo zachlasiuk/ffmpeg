@@ -12,9 +12,9 @@ steps:
 
   - bash: |
       set -eu
-      # Build multi-arch images for linux/amd64 and linux/arm64
+      # Build for local platform only for testing
       docker buildx build \
-        --platform linux/amd64,linux/arm64 \
+        --platform linux/amd64 \
         --build-arg MAKEFLAGS="-j$(($(grep -c ^processor /proc/cpuinfo) + 1))" \
         -t ${DOCKER}:${VERSION}-${VARIANT} \
         -t ${DOCKER}:${LONG_VERSION}-${VARIANT} \
@@ -26,12 +26,12 @@ steps:
       # Test the built image
       docker run --rm ${DOCKER}:${LONG_VERSION}-${VARIANT} -buildconf
       docker images
-    displayName: Build multi-arch docker image
+    displayName: Build and test docker image (amd64)
 
   - bash: |
       set -eu
       echo ${DOCKER_PASSWORD} | docker login --username ${DOCKER_LOGIN} --password-stdin
-      echo ${GHCR_PAT} | docker login ghcr.io --username USERNAME --password-stdin
+      echo ${GHCR_PAT} | docker login ghcr.io --username ${GHCR_USERNAME} --password-stdin
       
       # Build and push multi-arch images
       docker buildx build \
@@ -74,3 +74,4 @@ steps:
     env:
       DOCKER_PASSWORD: $(docker.password)
       GHCR_PAT: $(ghcr.pat)
+      GHCR_USERNAME: $(ghcr.username)
