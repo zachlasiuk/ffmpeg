@@ -48,7 +48,15 @@ def get_eol_versions():
     return keep_version
 
 
-keep_version = get_eol_versions()
+# For offline usage, use static version list
+try:
+    keep_version = get_eol_versions()
+except Exception as e:
+    print(f"Warning: Could not fetch versions from API: {e}")
+    print("Using static version list...")
+    # Use the version already present in the repository
+    keep_version = ["8.0.1"]
+
 print("The following versions of ffmpeg is still supported:")
 for version in keep_version:
     print(version)
@@ -282,8 +290,11 @@ for version in keep_version:
         if variant["parent"] == "nvidia":
             CFLAGS.append("-I${PREFIX}/include/ffnvcodec")
             CFLAGS.append("-I/usr/local/cuda/include/")
+            # Support both x86_64 and aarch64 CUDA libraries
             LDFLAGS.append("-L/usr/local/cuda/lib64")
             LDFLAGS.append("-L/usr/local/cuda/lib32/")
+            LDFLAGS.append("-L/usr/local/cuda/targets/x86_64-linux/lib")
+            LDFLAGS.append("-L/usr/local/cuda/targets/sbsa-linux/lib")
             FFMPEG_CONFIG_FLAGS.append("--enable-nvenc")
             FFMPEG_CONFIG_FLAGS.append("--enable-cuda-nvcc")
             if version == "snapshot" or int(version[0]) >= 4:
@@ -305,8 +316,9 @@ for version in keep_version:
             # -L/usr/local/lib64 -L/usr/lib -L/usr/lib64")
 
             # Some shenagians to get libvmaf to build with static linking
+            # Use architecture-specific paths (x86_64 or aarch64)
             FFMPEG_CONFIG_FLAGS.append(
-                "--extra-ldflags=-L/opt/ffmpeg/lib/x86_64-linux-gnu"
+                "--extra-ldflags=-L/opt/ffmpeg/lib/x86_64-linux-gnu -L/opt/ffmpeg/lib/aarch64-linux-gnu"
             )
 
             # --ld=g++ or --ld=clang++ when configuring ffmpeg
@@ -323,8 +335,11 @@ for version in keep_version:
 
         # if "ubuntu" in variant["parent"] and float(version[0:3]) >= 5.1:
         if float(version[0:3]) >= 5.1:
+            # Support both x86_64 and aarch64 architectures
             CFLAGS.append("-I/usr/include/x86_64-linux-gnu")
+            CFLAGS.append("-I/usr/include/aarch64-linux-gnu")
             LDFLAGS.append("-L/usr/lib/x86_64-linux-gnu")
+            LDFLAGS.append("-L/usr/lib/aarch64-linux-gnu")
             LDFLAGS.append("-L/usr/lib")  # for alpine ( but probably fine for all)
 
         if float(version[0:1]) >= 8:
